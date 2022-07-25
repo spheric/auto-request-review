@@ -13879,20 +13879,27 @@ class PullRequest {
   }
 
   get author() {
+    core.info('author')
+    core.info(this._pull_request_paylaod)
     return this._pull_request_paylaod.user.login;
   }
 
   get title() {
+    core.info('title')
     return this._pull_request_paylaod.title;
   }
 
   get is_draft() {
+    core.info('is_draft')
     return this._pull_request_paylaod.draft;
   }
 }
 
 function get_pull_request() {
   const context = get_context();
+
+  core.info('Get Pull Request')
+  core.info(JSON.stringify(context))
 
   return new PullRequest(context.payload.pull_request);
 }
@@ -13902,12 +13909,19 @@ async function fetch_config() {
   const octokit = get_octokit();
   const config_path = get_config_path();
 
+  core.info(context.repo.owner)
+  core.info(config_path)
+  core.info(context.repo.repo)
+  core.info(context.ref)
+
   const { data: response_body } = await octokit.repos.getContent({
     owner: context.repo.owner,
     repo: context.repo.repo,
     path: config_path,
     ref: context.ref,
   });
+
+  core.info(response_body)
 
   const content = Buffer.from(response_body.content, response_body.encoding).toString();
   return yaml.parse(content);
@@ -13958,6 +13972,39 @@ async function assign_reviewers(reviewers) {
   });
 }
 
+async function list_team_members(team) {
+  const octokit = get_octokit();
+  const context = get_context();
+
+  core.info(`Org:${context.repo.owner}. Listing team members for team ${team}`);
+  try {
+    const { data: response_body } = await octokit.teams.listMembersInOrg({ org: context.repo.owner, team_slug: team })
+
+    return response_body.map((member) => member.login);
+  } catch (error) {
+    if (error.status === 404) {
+      core.warning('No team was found');
+
+      return [];
+    }
+  }
+}
+
+async function list_requested_reviewers() {
+  const octokit = get_octokit();
+  const context = get_context();
+
+  const { data: response_body } = await octokit.pulls.listRequestedReviewers({
+    owner: context.repo.owner,
+    repo: context.repo.repo,
+    pull_number: context.payload.pull_request.number,
+  })
+
+  core.info(JSON.stringify(response_body));
+
+  return response_body.map((member) => member.login);
+}
+
 /* Private */
 
 let context_cache;
@@ -13998,6 +14045,8 @@ module.exports = {
   fetch_config,
   fetch_changed_files,
   assign_reviewers,
+  list_team_members,
+  list_requested_reviewers,
   clear_cache,
 };
 
@@ -14019,12 +14068,16 @@ const {
   identify_reviewers_by_author,
   should_request_review,
   fetch_default_reviewers,
+  filter_excluded_reviewers,
+  fetch_author_belongs_to_github_team_members,
+  filter_already_requested_reviewers,
   randomly_pick_reviewers,
 } = __nccwpck_require__(5089);
 
 async function run() {
   core.info('Fetching configuration file from the source branch');
 
+  core.info('Test');
   let config;
 
   try {
@@ -14037,7 +14090,11 @@ async function run() {
     throw error;
   }
 
+  core.info(config)
+
   const { title, is_draft, author } = github.get_pull_request();
+
+  core.info('hello')
 
   if (!should_request_review({ title, is_draft, config })) {
     core.info('Matched the ignoring rules; terminating the process');
@@ -14046,6 +14103,8 @@ async function run() {
 
   core.info('Fetching changed files in the pull request');
   const changed_files = await github.fetch_changed_files();
+
+  core.info(changed_files)
 
   core.info('Identifying reviewers based on the changed files');
   const reviewers_based_on_files = identify_reviewers_by_changed_files({ config, changed_files, excludes: [ author ] });
@@ -14057,6 +14116,14 @@ async function run() {
   const reviewers_from_same_teams = fetch_other_group_members({ config, author });
 
   let reviewers = [ ...new Set([ ...reviewers_based_on_files, ...reviewers_based_on_author, ...reviewers_from_same_teams ]) ];
+
+  core.info('Fetch author belongs to github team members - when load_github_members option is on');
+  reviewers = await fetch_author_belongs_to_github_team_members({ reviewers, config, author });
+  core.info(JSON.stringify(reviewers));
+
+  core.info('Filter already requested reviewers - when load_github_members option is on');
+  reviewers = await filter_already_requested_reviewers({ reviewers, config });
+  core.info(JSON.stringify(reviewers));
 
   if (reviewers.length === 0) {
     core.info('Matched no reviewers');
@@ -14071,8 +14138,13 @@ async function run() {
     reviewers.push(...default_reviewers);
   }
 
+  core.info('Filter excluded reviewers from reviewers list');
+  reviewers = filter_excluded_reviewers({ reviewers, config });
+  core.info(JSON.stringify(reviewers));
+
   core.info('Randomly picking reviewers if the number of reviewers is set');
   reviewers = randomly_pick_reviewers({ reviewers, config });
+  core.info(JSON.stringify(reviewers));
 
   core.info(`Requesting review to ${reviewers.join(', ')}`);
   await github.assign_reviewers(reviewers);
@@ -14099,6 +14171,8 @@ if (process.env.NODE_ENV !== 'automated-testing') {
 const core = __nccwpck_require__(2186);
 const minimatch = __nccwpck_require__(3973);
 const sample_size = __nccwpck_require__(2199);
+const github = __nccwpck_require__(8396); // Don't destructure this object to stub with sinon in tests
+const partition = __nccwpck_require__(2539);
 
 function fetch_other_group_members({ author, config }) {
   const DEFAULT_OPTIONS = {
@@ -14138,15 +14212,17 @@ function identify_reviewers_by_changed_files({ config, changed_files, excludes =
   const matching_reviewers = [];
 
   Object.entries(config.files).forEach(([ glob_pattern, reviewers ]) => {
-    if (changed_files.some((changed_file) => minimatch(changed_file, glob_pattern))) {
+    if (changed_files.some((changed_file) => {
+      core.info(`matching ${changed_file}, pattern ${glob_pattern} match?: ${minimatch(changed_file, glob_pattern)}`)
+      return minimatch(changed_file, glob_pattern)
+    })) {
       matching_reviewers.push(...reviewers);
     }
   });
 
   const individuals = replace_groups_with_individuals({ reviewers: matching_reviewers, config });
 
-  // Depue and filter the results
-  return [ ...new Set(individuals) ].filter((reviewer) => !excludes.includes(reviewer));
+  return exclude_reviewers({ reviewers: individuals, excludes: excludes })
 }
 
 function identify_reviewers_by_author({ config, 'author': specified_author }) {
@@ -14203,8 +14279,22 @@ function fetch_default_reviewers({ config, excludes = [] }) {
 
   const individuals = replace_groups_with_individuals({ reviewers: config.reviewers.defaults, config });
 
-  // Depue and filter the results
-  return [ ...new Set(individuals) ].filter((reviewer) => !excludes.includes(reviewer));
+  return exclude_reviewers({ reviewers: individuals, excludes: excludes })
+}
+
+function filter_excluded_reviewers({ reviewers, config }) {
+  const { exclude } = {
+    ...config.options,
+  };
+
+  const excluded_individuals = replace_groups_with_individuals({ reviewers: exclude || [], config });
+
+  return exclude_reviewers({ reviewers, excludes: excluded_individuals })
+}
+
+function exclude_reviewers({ reviewers, excludes = []}) {
+  // Dedupe and filter results
+  return [ ...new Set(reviewers) ].filter((reviewer) => !excludes.includes(reviewer));
 }
 
 function randomly_pick_reviewers({ reviewers, config }) {
@@ -14217,6 +14307,51 @@ function randomly_pick_reviewers({ reviewers, config }) {
   }
 
   return sample_size(reviewers, number_of_reviewers);
+}
+
+async function fetch_author_belongs_to_github_team_members({ reviewers, config, author }) {
+  const { load_github_members } = {
+    ...config.options,
+  };
+
+  if (load_github_members === undefined) {
+    return reviewers;
+  }
+
+  const [ teams_with_prefix, individuals ] = partition(reviewers, (reviewer) => reviewer.startsWith('team:'));
+  const teams = teams_with_prefix.map((team_with_prefix) => team_with_prefix.replace('team:', ''));
+  const unresolved_promises = teams.map(team => github.list_team_members(team))
+
+  let team_members = await Promise.all(unresolved_promises)
+
+  core.info(team_members)
+  core.info(`Author ${author}`)
+
+  team_members = team_members.filter((members) => members.includes(author)).flat();
+  team_members = team_members.filter((member) => member !== author)
+
+  core.info(`No Author`)
+  core.info(team_members)
+
+  core.info(`Individuals`)
+  core.info(individuals)
+
+  return [...new Set([ ...individuals, ...team_members ])]
+}
+
+
+async function filter_already_requested_reviewers({ reviewers, config }) {
+  const { load_github_members } = {
+    ...config.options,
+  };
+
+  if (load_github_members === undefined) {
+    return reviewers;
+  }
+
+  const requested_reviewers = await github.list_requested_reviewers()
+
+  return reviewers.filter((reviewer) => !requested_reviewers.includes(reviewer))
 }
 
 /* Private */
@@ -14234,6 +14369,9 @@ module.exports = {
   identify_reviewers_by_author,
   should_request_review,
   fetch_default_reviewers,
+  filter_excluded_reviewers,
+  fetch_author_belongs_to_github_team_members,
+  filter_already_requested_reviewers,
   randomly_pick_reviewers,
 };
 

@@ -13,6 +13,7 @@ const {
   fetch_config,
   fetch_changed_files,
   assign_reviewers,
+  list_team_members,
   clear_cache,
 } = require('../src/github');
 
@@ -120,6 +121,37 @@ describe('github', function() {
 
       const changed_files = await fetch_changed_files();
       expect(changed_files).to.have.members(filenames);
+    });
+  });
+
+  describe('list_team_members()', function() {
+    const stub = sinon.stub();
+    const octokit = {
+      rest: {
+        teams: {
+          listMembersInOrg: stub
+        }
+      }
+    }
+
+    beforeEach(function() {
+      github.getOctokit.resetBehavior();
+      github.getOctokit.returns(octokit);
+    });
+
+    it('lists team members', async function() {
+      stub.returns({
+        data: [
+          { 'login': 'koopa' },
+          { 'login': 'troopa' },
+          { 'login': 'mario' }
+        ],
+      });
+
+      const team_members = await list_team_members('koopa-troopa', 'org-name');
+
+      expect(team_members).to.have.members(['mario', 'koopa', 'troopa']);
+      expect(team_members).to.have.lengthOf(3);
     });
   });
 

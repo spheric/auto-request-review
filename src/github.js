@@ -14,20 +14,27 @@ class PullRequest {
   }
 
   get author() {
+    core.info('author')
+    core.info(this._pull_request_paylaod)
     return this._pull_request_paylaod.user.login;
   }
 
   get title() {
+    core.info('title')
     return this._pull_request_paylaod.title;
   }
 
   get is_draft() {
+    core.info('is_draft')
     return this._pull_request_paylaod.draft;
   }
 }
 
 function get_pull_request() {
   const context = get_context();
+
+  core.info('Get Pull Request')
+  core.info(JSON.stringify(context))
 
   return new PullRequest(context.payload.pull_request);
 }
@@ -37,12 +44,19 @@ async function fetch_config() {
   const octokit = get_octokit();
   const config_path = get_config_path();
 
+  core.info(context.repo.owner)
+  core.info(config_path)
+  core.info(context.repo.repo)
+  core.info(context.ref)
+
   const { data: response_body } = await octokit.repos.getContent({
     owner: context.repo.owner,
     repo: context.repo.repo,
     path: config_path,
     ref: context.ref,
   });
+
+  core.info(response_body)
 
   const content = Buffer.from(response_body.content, response_body.encoding).toString();
   return yaml.parse(content);
@@ -93,6 +107,39 @@ async function assign_reviewers(reviewers) {
   });
 }
 
+async function list_team_members(team) {
+  const octokit = get_octokit();
+  const context = get_context();
+
+  core.info(`Org:${context.repo.owner}. Listing team members for team ${team}`);
+  try {
+    const { data: response_body } = await octokit.teams.listMembersInOrg({ org: context.repo.owner, team_slug: team })
+
+    return response_body.map((member) => member.login);
+  } catch (error) {
+    if (error.status === 404) {
+      core.warning('No team was found');
+
+      return [];
+    }
+  }
+}
+
+async function list_requested_reviewers() {
+  const octokit = get_octokit();
+  const context = get_context();
+
+  const { data: response_body } = await octokit.pulls.listRequestedReviewers({
+    owner: context.repo.owner,
+    repo: context.repo.repo,
+    pull_number: context.payload.pull_request.number,
+  })
+
+  core.info(JSON.stringify(response_body));
+
+  return response_body.map((member) => member.login);
+}
+
 /* Private */
 
 let context_cache;
@@ -133,5 +180,7 @@ module.exports = {
   fetch_config,
   fetch_changed_files,
   assign_reviewers,
+  list_team_members,
+  list_requested_reviewers,
   clear_cache,
 };

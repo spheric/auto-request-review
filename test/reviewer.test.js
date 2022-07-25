@@ -7,6 +7,7 @@ const {
   should_request_review,
   fetch_default_reviewers,
   randomly_pick_reviewers,
+  filter_excluded_reviewers,
 } = require('../src/reviewer');
 const { expect } = require('chai');
 
@@ -294,6 +295,39 @@ describe('reviewer', function() {
         },
       };
       expect(fetch_default_reviewers({ config, excludes: [ 'luigi' ] })).to.have.members([ 'dr-mario', 'mario' ]);
+    });
+  });
+
+  describe('filter_excluded_reviewers()', function() {
+    it('does not exclude reviewer if no config', function() {
+      const reviewers = [ 'dr-mario', 'mario', 'luigi' ];
+      const config = {};
+      expect(filter_excluded_reviewers({ reviewers, config })).to.have.members([ 'dr-mario', 'mario', 'luigi' ]);
+    });
+
+    it('excludes reviewer if exclude member match', function() {
+      const reviewers = [ 'dr-mario', 'mario', 'luigi' ];
+      const config = {
+        options: {
+          excludes: ['mario']
+        },
+      };
+
+      const reviewers_no_excluded = filter_excluded_reviewers({ reviewers, config });
+
+      expect(reviewers_no_excluded).to.have.members([ 'dr-mario', 'luigi' ]);
+      expect(reviewers_no_excluded).to.have.lengthOf(2);
+    });
+
+    it('does not exclude reviewer if no match', function() {
+      const reviewers = [ 'dr-mario', 'mario', 'luigi' ];
+      const config = {
+        options: {
+          exclude: ['wario']
+        },
+      };
+
+      expect(filter_excluded_reviewers({ reviewers, config })).to.have.members([ 'dr-mario', 'mario', 'luigi' ]);
     });
   });
 

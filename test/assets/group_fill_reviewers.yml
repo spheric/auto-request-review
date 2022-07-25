@@ -1,0 +1,20 @@
+reviewers:
+  default:
+    - team:backend_developers
+
+  excludes:
+    - mable_au
+
+  groups:
+    sp_enablement:
+      - team:sp_enablement:1
+    finance:
+      - team:finance:1
+
+options:
+  ignore_draft: true
+  ignored_keywords:
+    - DO NOT REVIEW
+  enable_group_assignment: false
+  fill_group_assignment: true
+  total_reviewers: 2

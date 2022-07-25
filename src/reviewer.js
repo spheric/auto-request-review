@@ -3,6 +3,8 @@
 const core = require('@actions/core');
 const minimatch = require('minimatch');
 const sample_size = require('lodash/sampleSize');
+const github = require('./github'); // Don't destructure this object to stub with sinon in tests
+const partition = require('lodash/partition');
 
 function fetch_other_group_members({ author, config }) {
   const DEFAULT_OPTIONS = {
@@ -42,15 +44,17 @@ function identify_reviewers_by_changed_files({ config, changed_files, excludes =
   const matching_reviewers = [];
 
   Object.entries(config.files).forEach(([ glob_pattern, reviewers ]) => {
-    if (changed_files.some((changed_file) => minimatch(changed_file, glob_pattern))) {
+    if (changed_files.some((changed_file) => {
+      core.info(`matching ${changed_file}, pattern ${glob_pattern} match?: ${minimatch(changed_file, glob_pattern)}`)
+      return minimatch(changed_file, glob_pattern)
+    })) {
       matching_reviewers.push(...reviewers);
     }
   });
 
   const individuals = replace_groups_with_individuals({ reviewers: matching_reviewers, config });
 
-  // Depue and filter the results
-  return [ ...new Set(individuals) ].filter((reviewer) => !excludes.includes(reviewer));
+  return exclude_reviewers({ reviewers: individuals, excludes: excludes })
 }
 
 function identify_reviewers_by_author({ config, 'author': specified_author }) {
@@ -107,8 +111,22 @@ function fetch_default_reviewers({ config, excludes = [] }) {
 
   const individuals = replace_groups_with_individuals({ reviewers: config.reviewers.defaults, config });
 
-  // Depue and filter the results
-  return [ ...new Set(individuals) ].filter((reviewer) => !excludes.includes(reviewer));
+  return exclude_reviewers({ reviewers: individuals, excludes: excludes })
+}
+
+function filter_excluded_reviewers({ reviewers, config }) {
+  const { exclude } = {
+    ...config.options,
+  };
+
+  const excluded_individuals = replace_groups_with_individuals({ reviewers: exclude || [], config });
+
+  return exclude_reviewers({ reviewers, excludes: excluded_individuals })
+}
+
+function exclude_reviewers({ reviewers, excludes = []}) {
+  // Dedupe and filter results
+  return [ ...new Set(reviewers) ].filter((reviewer) => !excludes.includes(reviewer));
 }
 
 function randomly_pick_reviewers({ reviewers, config }) {
@@ -121,6 +139,51 @@ function randomly_pick_reviewers({ reviewers, config }) {
   }
 
   return sample_size(reviewers, number_of_reviewers);
+}
+
+async function fetch_author_belongs_to_github_team_members({ reviewers, config, author }) {
+  const { load_github_members } = {
+    ...config.options,
+  };
+
+  if (load_github_members === undefined) {
+    return reviewers;
+  }
+
+  const [ teams_with_prefix, individuals ] = partition(reviewers, (reviewer) => reviewer.startsWith('team:'));
+  const teams = teams_with_prefix.map((team_with_prefix) => team_with_prefix.replace('team:', ''));
+  const unresolved_promises = teams.map(team => github.list_team_members(team))
+
+  let team_members = await Promise.all(unresolved_promises)
+
+  core.info(team_members)
+  core.info(`Author ${author}`)
+
+  team_members = team_members.filter((members) => members.includes(author)).flat();
+  team_members = team_members.filter((member) => member !== author)
+
+  core.info(`No Author`)
+  core.info(team_members)
+
+  core.info(`Individuals`)
+  core.info(individuals)
+
+  return [...new Set([ ...individuals, ...team_members ])]
+}
+
+
+async function filter_already_requested_reviewers({ reviewers, config }) {
+  const { load_github_members } = {
+    ...config.options,
+  };
+
+  if (load_github_members === undefined) {
+    return reviewers;
+  }
+
+  const requested_reviewers = await github.list_requested_reviewers()
+
+  return reviewers.filter((reviewer) => !requested_reviewers.includes(reviewer))
 }
 
 /* Private */
@@ -138,5 +201,8 @@ module.exports = {
   identify_reviewers_by_author,
   should_request_review,
   fetch_default_reviewers,
+  filter_excluded_reviewers,
+  fetch_author_belongs_to_github_team_members,
+  filter_already_requested_reviewers,
   randomly_pick_reviewers,
 };

@@ -83,6 +83,24 @@ reviewers:
     - repository-owners
 ```
 
+### Exclude group members
+Exclude group members from any matching
+
+```yaml
+options:
+  exclude:
+    - js-man
+    - js-woman
+```
+
+### Fetch github team members
+Fetch only github team members that the author belongs to for matching
+
+```yaml
+options:
+  load_github_members: true
+```
+
 ### Randomly pick reviewers from matching reviewers
 You can randomly assign reviewers out of those who meet the conditions you set (e.g. file changes, groups, etc.).
 
