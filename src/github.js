@@ -111,7 +111,6 @@ async function list_team_members(team) {
   const octokit = get_octokit();
   const context = get_context();
 
-  core.info(`Org:${context.repo.owner}. Listing team members for team ${team}`);
   try {
     const { data: response_body } = await octokit.teams.listMembersInOrg({ org: context.repo.owner, team_slug: team })
 
@@ -137,7 +136,7 @@ async function list_requested_reviewers() {
 
   core.info(JSON.stringify(response_body));
 
-  return response_body.map((member) => member.login);
+  return response_body.users.map((member) => member.login);
 }
 
 /* Private */

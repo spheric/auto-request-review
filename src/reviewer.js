@@ -44,10 +44,7 @@ function identify_reviewers_by_changed_files({ config, changed_files, excludes =
   const matching_reviewers = [];
 
   Object.entries(config.files).forEach(([ glob_pattern, reviewers ]) => {
-    if (changed_files.some((changed_file) => {
-      core.info(`matching ${changed_file}, pattern ${glob_pattern} match?: ${minimatch(changed_file, glob_pattern)}`)
-      return minimatch(changed_file, glob_pattern)
-    })) {
+    if (changed_files.some((changed_file) => minimatch(changed_file, glob_pattern))) {
       matching_reviewers.push(...reviewers);
     }
   });
@@ -156,17 +153,8 @@ async function fetch_author_belongs_to_github_team_members({ reviewers, config, 
 
   let team_members = await Promise.all(unresolved_promises)
 
-  core.info(team_members)
-  core.info(`Author ${author}`)
-
   team_members = team_members.filter((members) => members.includes(author)).flat();
   team_members = team_members.filter((member) => member !== author)
-
-  core.info(`No Author`)
-  core.info(team_members)
-
-  core.info(`Individuals`)
-  core.info(individuals)
 
   return [...new Set([ ...individuals, ...team_members ])]
 }

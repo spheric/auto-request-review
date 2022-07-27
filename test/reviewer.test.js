@@ -309,7 +309,7 @@ describe('reviewer', function() {
       const reviewers = [ 'dr-mario', 'mario', 'luigi' ];
       const config = {
         options: {
-          excludes: ['mario']
+          exclude: ['mario']
         },
       };
 

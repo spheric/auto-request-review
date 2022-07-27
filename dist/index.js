@@ -13976,7 +13976,6 @@ async function list_team_members(team) {
   const octokit = get_octokit();
   const context = get_context();
 
-  core.info(`Org:${context.repo.owner}. Listing team members for team ${team}`);
   try {
     const { data: response_body } = await octokit.teams.listMembersInOrg({ org: context.repo.owner, team_slug: team })
 
@@ -14002,7 +14001,7 @@ async function list_requested_reviewers() {
 
   core.info(JSON.stringify(response_body));
 
-  return response_body.map((member) => member.login);
+  return response_body.users.map((member) => member.login);
 }
 
 /* Private */
@@ -14090,11 +14089,7 @@ async function run() {
     throw error;
   }
 
-  core.info(config)
-
   const { title, is_draft, author } = github.get_pull_request();
-
-  core.info('hello')
 
   if (!should_request_review({ title, is_draft, config })) {
     core.info('Matched the ignoring rules; terminating the process');
@@ -14103,8 +14098,6 @@ async function run() {
 
   core.info('Fetching changed files in the pull request');
   const changed_files = await github.fetch_changed_files();
-
-  core.info(changed_files)
 
   core.info('Identifying reviewers based on the changed files');
   const reviewers_based_on_files = identify_reviewers_by_changed_files({ config, changed_files, excludes: [ author ] });
@@ -14119,11 +14112,9 @@ async function run() {
 
   core.info('Fetch author belongs to github team members - when load_github_members option is on');
   reviewers = await fetch_author_belongs_to_github_team_members({ reviewers, config, author });
-  core.info(JSON.stringify(reviewers));
 
   core.info('Filter already requested reviewers - when load_github_members option is on');
   reviewers = await filter_already_requested_reviewers({ reviewers, config });
-  core.info(JSON.stringify(reviewers));
 
   if (reviewers.length === 0) {
     core.info('Matched no reviewers');
@@ -14140,11 +14131,9 @@ async function run() {
 
   core.info('Filter excluded reviewers from reviewers list');
   reviewers = filter_excluded_reviewers({ reviewers, config });
-  core.info(JSON.stringify(reviewers));
 
   core.info('Randomly picking reviewers if the number of reviewers is set');
   reviewers = randomly_pick_reviewers({ reviewers, config });
-  core.info(JSON.stringify(reviewers));
 
   core.info(`Requesting review to ${reviewers.join(', ')}`);
   await github.assign_reviewers(reviewers);
@@ -14212,10 +14201,7 @@ function identify_reviewers_by_changed_files({ config, changed_files, excludes =
   const matching_reviewers = [];
 
   Object.entries(config.files).forEach(([ glob_pattern, reviewers ]) => {
-    if (changed_files.some((changed_file) => {
-      core.info(`matching ${changed_file}, pattern ${glob_pattern} match?: ${minimatch(changed_file, glob_pattern)}`)
-      return minimatch(changed_file, glob_pattern)
-    })) {
+    if (changed_files.some((changed_file) => minimatch(changed_file, glob_pattern))) {
       matching_reviewers.push(...reviewers);
     }
   });
@@ -14324,17 +14310,8 @@ async function fetch_author_belongs_to_github_team_members({ reviewers, config, 
 
   let team_members = await Promise.all(unresolved_promises)
 
-  core.info(team_members)
-  core.info(`Author ${author}`)
-
   team_members = team_members.filter((members) => members.includes(author)).flat();
   team_members = team_members.filter((member) => member !== author)
-
-  core.info(`No Author`)
-  core.info(team_members)
-
-  core.info(`Individuals`)
-  core.info(individuals)
 
   return [...new Set([ ...individuals, ...team_members ])]
 }

@@ -127,10 +127,8 @@ describe('github', function() {
   describe('list_team_members()', function() {
     const stub = sinon.stub();
     const octokit = {
-      rest: {
-        teams: {
-          listMembersInOrg: stub
-        }
+      teams: {
+        listMembersInOrg: stub
       }
     }
 

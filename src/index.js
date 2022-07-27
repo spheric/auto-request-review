@@ -31,11 +31,7 @@ async function run() {
     throw error;
   }
 
-  core.info(config)
-
   const { title, is_draft, author } = github.get_pull_request();
-
-  core.info('hello')
 
   if (!should_request_review({ title, is_draft, config })) {
     core.info('Matched the ignoring rules; terminating the process');
@@ -44,8 +40,6 @@ async function run() {
 
   core.info('Fetching changed files in the pull request');
   const changed_files = await github.fetch_changed_files();
-
-  core.info(changed_files)
 
   core.info('Identifying reviewers based on the changed files');
   const reviewers_based_on_files = identify_reviewers_by_changed_files({ config, changed_files, excludes: [ author ] });
@@ -60,11 +54,9 @@ async function run() {
 
   core.info('Fetch author belongs to github team members - when load_github_members option is on');
   reviewers = await fetch_author_belongs_to_github_team_members({ reviewers, config, author });
-  core.info(JSON.stringify(reviewers));
 
   core.info('Filter already requested reviewers - when load_github_members option is on');
   reviewers = await filter_already_requested_reviewers({ reviewers, config });
-  core.info(JSON.stringify(reviewers));
 
   if (reviewers.length === 0) {
     core.info('Matched no reviewers');
@@ -81,11 +73,9 @@ async function run() {
 
   core.info('Filter excluded reviewers from reviewers list');
   reviewers = filter_excluded_reviewers({ reviewers, config });
-  core.info(JSON.stringify(reviewers));
 
   core.info('Randomly picking reviewers if the number of reviewers is set');
   reviewers = randomly_pick_reviewers({ reviewers, config });
-  core.info(JSON.stringify(reviewers));
 
   core.info(`Requesting review to ${reviewers.join(', ')}`);
   await github.assign_reviewers(reviewers);
