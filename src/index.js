@@ -18,7 +18,6 @@ const {
 async function run() {
   core.info('Fetching configuration file from the source branch');
 
-  core.info('Test');
   let config;
 
   try {

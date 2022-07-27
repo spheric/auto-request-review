@@ -13879,27 +13879,20 @@ class PullRequest {
   }
 
   get author() {
-    core.info('author')
-    core.info(this._pull_request_paylaod)
     return this._pull_request_paylaod.user.login;
   }
 
   get title() {
-    core.info('title')
     return this._pull_request_paylaod.title;
   }
 
   get is_draft() {
-    core.info('is_draft')
     return this._pull_request_paylaod.draft;
   }
 }
 
 function get_pull_request() {
   const context = get_context();
-
-  core.info('Get Pull Request')
-  core.info(JSON.stringify(context))
 
   return new PullRequest(context.payload.pull_request);
 }
@@ -13909,19 +13902,12 @@ async function fetch_config() {
   const octokit = get_octokit();
   const config_path = get_config_path();
 
-  core.info(context.repo.owner)
-  core.info(config_path)
-  core.info(context.repo.repo)
-  core.info(context.ref)
-
   const { data: response_body } = await octokit.repos.getContent({
     owner: context.repo.owner,
     repo: context.repo.repo,
     path: config_path,
     ref: context.ref,
   });
-
-  core.info(response_body)
 
   const content = Buffer.from(response_body.content, response_body.encoding).toString();
   return yaml.parse(content);
@@ -13999,8 +13985,6 @@ async function list_requested_reviewers() {
     pull_number: context.payload.pull_request.number,
   })
 
-  core.info(JSON.stringify(response_body));
-
   return response_body.users.map((member) => member.login);
 }
 
@@ -14076,7 +14060,6 @@ const {
 async function run() {
   core.info('Fetching configuration file from the source branch');
 
-  core.info('Test');
   let config;
 
   try {
