@@ -14279,7 +14279,12 @@ function randomly_pick_reviewers({ reviewers, config }) {
 }
 
 async function fetch_author_belongs_to_github_team_members({ reviewers, config, author }) {
-  const { load_github_members } = {
+  const DEFAULT_OPTIONS = {
+    force_pick: false
+  };
+
+  const { load_github_members, force_pick } = {
+    ...DEFAULT_OPTIONS,
     ...config.options,
   };
 
@@ -14293,7 +14298,9 @@ async function fetch_author_belongs_to_github_team_members({ reviewers, config, 
 
   let team_members = await Promise.all(unresolved_promises)
 
-  team_members = team_members.filter((members) => members.includes(author)).flat();
+  if(!force_pick) {
+    team_members = team_members.filter((members) => members.includes(author)).flat();
+  }
   team_members = team_members.filter((member) => member !== author)
 
   return [...new Set([ ...individuals, ...team_members ])]
