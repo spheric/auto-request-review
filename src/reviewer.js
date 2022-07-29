@@ -159,9 +159,10 @@ async function fetch_author_belongs_to_github_team_members({ reviewers, config, 
   let team_members = await Promise.all(unresolved_promises)
 
   if(!force_pick) {
-    team_members = team_members.filter((members) => members.includes(author)).flat();
+    team_members = team_members.filter((members) => members.includes(author))
   }
-  team_members = team_members.filter((member) => member !== author)
+
+  team_members = team_members.flat().filter((member) => member !== author)
 
   return [...new Set([ ...individuals, ...team_members ])]
 }
